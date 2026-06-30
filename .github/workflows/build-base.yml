@@ -1,0 +1,68 @@
+---
+name: Build base image
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - Dockerfile
+      - .github/workflows/build-base.yml
+      - entrypoint.sh
+      - verify.sh
+      - setup_universal.sh
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b9e0990d219a03df7633c93f6f005a8fecbcab22  # v7
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          tool-cache: true
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@45b191481076e80d5734fec83fc5b651df3537cc  # v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,format=short
+            type=sha,format=long
+            type=raw,value=base
+      - uses: docker/login-action@17f7c1809f7467d4244b4ff01b0dbe0b8b9e3d43  # v4
+        with:
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ghcr.io
+      - uses: docker/setup-qemu-action@451542b03ae7946b7082a398b11c8c315a0e4e80  # v4
+      - uses: docker/setup-buildx-action@bed9a68598762c1a47e745eb5edc904490f2411b  # v4
+      - name: Build Docker
+        uses: docker/build-push-action@b99c92828ab902cd2c54088e778f547a66bf746f  # v7
+        with:
+          context: .
+          file: Dockerfile
+          build-args: |
+            PYTHON_VERSIONS=3.13
+            AMD_JAVA_VERSIONS=25
+            RUST_VERSIONS=1.95.0
+            RUBY_VERSIONS=3.4.4
+            GO_VERSIONS=1.25.1
+            SWIFT_VERSIONS=6.2
+            PHP_VERSIONS=8.5
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:cache,mode=max
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' }}
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          secrets: |-
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
